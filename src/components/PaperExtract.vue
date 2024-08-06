@@ -62,9 +62,16 @@
   >([])
 
   const handleInput = (e) => {
-    document.querySelectorAll('.input-textarea img').forEach((img) => {
+    const textArea = document.querySelector('.input-textarea')
+    textArea?.querySelectorAll('img').forEach((img) => {
       img.setAttribute('style', '')
     })
+
+    const savedSel = saveSelection(textArea)
+    handleRemoveTags(textArea)
+    if (savedSel) {
+      restoreSelection(textArea, savedSel)
+    }
     const content = e.target.innerHTML
 
     if (content) {
@@ -114,6 +121,102 @@
       return content.split('.')[1].trim()
     }
     return ''
+  }
+
+  const handleRemoveTags = (container: any) => {
+    const nodes = container.childNodes
+
+    for (let i = 0; i < nodes.length; i++) {
+      const node = nodes[i]
+
+      if (
+        node.nodeType === Node.ELEMENT_NODE &&
+        (node.tagName === 'DIV' || node.tagName === 'SPAN')
+      ) {
+        // 将子节点插入到当前节点之前
+        while (node.firstChild) {
+          container.insertBefore(node.firstChild, node)
+        }
+        // 移除当前节点
+        container.removeChild(node)
+        // 递归调用以处理嵌套的 div 和 span
+        i-- // 调整索引以检查新的当前节点
+      } else if (node.tagName === 'BR') {
+        // 创建一个换行符文本节点
+        const newline = document.createTextNode('\n')
+        // 替换 <br> 标签
+        container.replaceChild(newline, node)
+      } else if (node.nodeType === Node.ELEMENT_NODE) {
+        // 递归处理嵌套的元素
+        handleRemoveTags(node)
+      }
+    }
+  }
+
+  const saveSelection = (container) => {
+    const selection = window.getSelection()
+    if (!selection) {
+      return
+    }
+    if (selection.rangeCount > 0) {
+      const range = selection.getRangeAt(0)
+      const preSelectionRange = range.cloneRange()
+      preSelectionRange.selectNodeContents(container)
+      preSelectionRange.setEnd(range.startContainer, range.startOffset)
+      const start = preSelectionRange.toString().length
+
+      return {
+        start: start,
+        end: start + range.toString().length,
+      }
+    }
+    return null
+  }
+
+  const restoreSelection = (container, savedSel) => {
+    let charIndex = 0
+    const range = document.createRange()
+    range.setStart(container, 0)
+    range.collapse(true)
+    const nodeStack = [container]
+    let node,
+      foundStart = false,
+      stop = false
+
+    while (!stop && (node = nodeStack.pop())) {
+      if (node.nodeType === 3) {
+        let nextCharIndex = charIndex + node.length
+        if (
+          !foundStart &&
+          savedSel.start >= charIndex &&
+          savedSel.start <= nextCharIndex
+        ) {
+          range.setStart(node, savedSel.start - charIndex)
+          foundStart = true
+        }
+        if (
+          foundStart &&
+          savedSel.end >= charIndex &&
+          savedSel.end <= nextCharIndex
+        ) {
+          range.setEnd(node, savedSel.end - charIndex)
+          stop = true
+        }
+        charIndex = nextCharIndex
+      } else {
+        let i = node.childNodes.length
+        while (i--) {
+          nodeStack.push(node.childNodes[i])
+        }
+      }
+    }
+
+    const selection = window.getSelection()
+    if (!selection) {
+      return
+    }
+    selection.removeAllRanges()
+    selection.addRange(range)
   }
 
   const handleImage = () => {}
